@@ -1,0 +1,205 @@
+import React, { useState, useEffect } from 'react';
+import { Layout, Row, Col, Card, Statistic, Input, Button, Space, message } from 'antd';
+import ScanForm from './components/ScanForm';
+import FilterPanel from './components/FilterPanel';
+import CommitTable from './components/CommitTable';
+import { getCommits, getCategories, addCategory, getStats } from './api/client';
+
+const { Header, Content } = Layout;
+
+function App() {
+  const [commits, setCommits] = useState([]);
+  const [filteredCommits, setFilteredCommits] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [stats, setStats] = useState({});
+  const [filters, setFilters] = useState({
+    source: undefined,
+    project: undefined,
+    author: undefined,
+    categoryIds: [],
+    search: '',
+  });
+  const [customCategoryName, setCustomCategoryName] = useState('');
+
+  // 加载 commits
+  const loadCommits = async () => {
+    try {
+      const result = await getCommits();
+      setCommits(result.commits);
+      setFilteredCommits(result.commits);
+    } catch (error) {
+      console.error('加载 commits 失败:', error);
+    }
+  };
+
+  // 加载 categories
+  const loadCategories = async () => {
+    try {
+      const result = await getCategories();
+      setCategories(result.categories);
+    } catch (error) {
+      console.error('加载 categories 失败:', error);
+    }
+  };
+
+  // 加载统计信息
+  const loadStats = async () => {
+    try {
+      const result = await getStats();
+      setStats(result.stats);
+    } catch (error) {
+      console.error('加载统计失败:', error);
+    }
+  };
+
+  // 初始加载
+  useEffect(() => {
+    loadCategories();
+    loadCommits();
+    loadStats();
+  }, []);
+
+  // 应用筛选
+  useEffect(() => {
+    let filtered = [...commits];
+
+    if (filters.source) {
+      filtered = filtered.filter((c) => c.source === filters.source);
+    }
+
+    if (filters.project) {
+      filtered = filtered.filter((c) => c.project === filters.project);
+    }
+
+    if (filters.author) {
+      filtered = filtered.filter((c) => c.author.includes(filters.author));
+    }
+
+    if (filters.categoryIds && filters.categoryIds.length > 0) {
+      filtered = filtered.filter((c) =>
+        filters.categoryIds.some((catId) =>
+          c.categories.some((cc) => cc.id === catId)
+        )
+      );
+    }
+
+    if (filters.search) {
+      const searchLower = filters.search.toLowerCase();
+      filtered = filtered.filter(
+        (c) =>
+          c.subject.toLowerCase().includes(searchLower) ||
+          c.message.toLowerCase().includes(searchLower)
+      );
+    }
+
+    setFilteredCommits(filtered);
+  }, [filters, commits]);
+
+  // 扫描完成回调
+  const handleScanComplete = () => {
+    loadCommits();
+    loadStats();
+  };
+
+  // 重置筛选
+  const handleResetFilters = () => {
+    setFilters({
+      source: undefined,
+      project: undefined,
+      author: undefined,
+      categoryIds: [],
+      search: '',
+    });
+  };
+
+  // 添加自定义分类
+  const handleAddCategory = async () => {
+    if (!customCategoryName.trim()) {
+      message.warning('请输入分类名称');
+      return;
+    }
+
+    try {
+      await addCategory(customCategoryName);
+      message.success('分类已添加');
+      setCustomCategoryName('');
+      loadCategories();
+    } catch (error) {
+      console.error('添加分类失败:', error);
+      message.error('添加分类失败');
+    }
+  };
+
+  // 提取唯一的 projects 和 authors
+  const uniqueProjects = [...new Set(commits.map((c) => c.project))];
+  const uniqueAuthors = [...new Set(commits.map((c) => c.author))];
+
+  return (
+    <Layout style={{ minHeight: '100vh' }}>
+      <Header style={{ background: '#001529', color: 'white', fontSize: 24, fontWeight: 'bold' }}>
+        Baseline Diff System
+      </Header>
+
+      <Content style={{ padding: '20px' }}>
+        <Row gutter={20}>
+          {/* 左侧：扫描表单 + 筛选器 */}
+          <Col xs={24} lg={6}>
+            <ScanForm onScanComplete={handleScanComplete} />
+
+            <Card title="统计信息" style={{ marginBottom: 20 }}>
+              <Space direction="vertical" style={{ width: '100%' }}>
+                <Statistic title="总 Commits" value={stats.total_commits || 0} />
+                <Statistic title="Common" value={stats.common || 0} />
+                <Statistic title="AOSP Only" value={stats.aosp_only || 0} />
+                <Statistic title="Vendor Only" value={stats.vendor_only || 0} />
+              </Space>
+            </Card>
+
+            <FilterPanel
+              filters={filters}
+              onFilterChange={setFilters}
+              categories={categories}
+              projects={uniqueProjects}
+              authors={uniqueAuthors}
+              onReset={handleResetFilters}
+            />
+
+            <Card title="自定义分类" style={{ marginTop: 20 }}>
+              <Space.Compact style={{ width: '100%' }}>
+                <Input
+                  placeholder="分类名称"
+                  value={customCategoryName}
+                  onChange={(e) => setCustomCategoryName(e.target.value)}
+                  onPressEnter={handleAddCategory}
+                />
+                <Button type="primary" onClick={handleAddCategory}>
+                  添加
+                </Button>
+              </Space.Compact>
+            </Card>
+          </Col>
+
+          {/* 右侧：Commit 列表 */}
+          <Col xs={24} lg={18}>
+            <Card
+              title={`Commits 列表 (${filteredCommits.length} / ${commits.length})`}
+              extra={
+                <Button onClick={loadCommits}>
+                  刷新
+                </Button>
+              }
+            >
+              <CommitTable
+                commits={filteredCommits}
+                categories={categories}
+                onCategoriesChange={loadCommits}
+              />
+            </Card>
+          </Col>
+        </Row>
+      </Content>
+    </Layout>
+  );
+}
+
+export default App;
