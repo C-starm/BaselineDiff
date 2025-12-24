@@ -97,7 +97,47 @@ Commit 与分类的多对多关系
 | commit_hash | TEXT | Commit Hash（外键） |
 | category_id | INTEGER | 分类 ID（外键） |
 
-## 安装和运行
+## 二进制打包部署（推荐）
+
+如果你想在 Linux/Windows 上直接运行，无需安装 Python 和 Node.js，可以使用打包版本：
+
+### 快速打包
+
+```bash
+# Linux
+./build.sh
+
+# Windows
+build.bat
+```
+
+打包完成后，会生成单个可执行文件：
+- Linux: `backend/dist/baseline-diff`
+- Windows: `backend\dist\baseline-diff.exe`
+
+### 特点
+
+- 无需任何外部依赖（不需要 Python、Node.js）
+- 单个文件包含完整的前后端
+- 直接运行即可，监听 `http://0.0.0.0:8000`
+- 文件大小约 80-120 MB
+
+### 部署
+
+```bash
+# Linux 部署示例
+scp backend/dist/baseline-diff user@target:/opt/
+ssh user@target
+cd /opt
+chmod +x baseline-diff
+./baseline-diff
+```
+
+详细的打包和部署说明，请参考：[BUILD_DEPLOY.md](BUILD_DEPLOY.md)
+
+## 开发环境安装和运行
+
+如果你需要开发或调试，按以下步骤安装：
 
 ### 1. 环境要求
 

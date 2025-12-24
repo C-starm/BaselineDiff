@@ -4,9 +4,12 @@ FastAPI 后端主文件
 """
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 import os
+import sys
 import traceback
 
 import database
@@ -16,6 +19,16 @@ import diff_analyzer
 
 
 app = FastAPI(title="Baseline Diff System API", version="1.0.0")
+
+# 获取静态文件路径（支持打包后的二进制文件）
+if getattr(sys, 'frozen', False):
+    # PyInstaller 打包后的路径
+    BASE_DIR = sys._MEIPASS
+else:
+    # 开发环境路径
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+STATIC_DIR = os.path.join(BASE_DIR, "static")
 
 # 配置 CORS
 app.add_middleware(
@@ -59,7 +72,7 @@ class RemoveCategoryRequest(BaseModel):
 
 # ==================== API Endpoints ====================
 
-@app.post("/scan_repos")
+@app.post("/api/scan_repos")
 async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
     """
     扫描 AOSP 和 Vendor 仓库
@@ -131,7 +144,7 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/commits")
+@app.get("/api/commits")
 async def get_commits(
     source: Optional[str] = None,
     project: Optional[str] = None,
@@ -180,7 +193,7 @@ async def get_commits(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/set_categories")
+@app.post("/api/set_categories")
 async def set_categories(request: SetCategoriesRequest):
     """
     设置 commit 的分类
@@ -194,7 +207,7 @@ async def set_categories(request: SetCategoriesRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/categories/list")
+@app.get("/api/categories/list")
 async def get_categories():
     """
     获取所有分类
@@ -211,7 +224,7 @@ async def get_categories():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/categories/add")
+@app.post("/api/categories/add")
 async def add_category(request: AddCategoryRequest):
     """
     添加自定义分类
@@ -229,7 +242,7 @@ async def add_category(request: AddCategoryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/categories/remove")
+@app.post("/api/categories/remove")
 async def remove_category(request: RemoveCategoryRequest):
     """
     删除分类
@@ -243,7 +256,7 @@ async def remove_category(request: RemoveCategoryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/stats")
+@app.get("/api/stats")
 async def get_stats():
     """
     获取统计信息
@@ -265,14 +278,57 @@ async def get_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.get("/")
-async def root():
+@app.get("/api/health")
+async def health_check():
     """健康检查"""
     return {
         "service": "Baseline Diff System API",
         "status": "running",
         "version": "1.0.0"
     }
+
+
+# 挂载静态文件（前端构建产物）
+if os.path.exists(STATIC_DIR):
+    app.mount("/assets", StaticFiles(directory=os.path.join(STATIC_DIR, "assets")), name="assets")
+
+    @app.get("/")
+    async def serve_frontend():
+        """提供前端首页"""
+        index_path = os.path.join(STATIC_DIR, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        else:
+            return {"message": "Frontend not built. Please run 'npm run build' in frontend directory."}
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend_routes(full_path: str):
+        """提供前端路由（SPA 支持）"""
+        # 如果是 API 请求，跳过
+        if full_path.startswith("api/"):
+            raise HTTPException(status_code=404, detail="Not found")
+
+        # 检查是否是静态文件
+        file_path = os.path.join(STATIC_DIR, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+
+        # 否则返回 index.html（SPA 路由）
+        index_path = os.path.join(STATIC_DIR, "index.html")
+        if os.path.exists(index_path):
+            return FileResponse(index_path)
+        else:
+            raise HTTPException(status_code=404, detail="Not found")
+else:
+    @app.get("/")
+    async def root():
+        """开发模式健康检查"""
+        return {
+            "service": "Baseline Diff System API",
+            "status": "running",
+            "version": "1.0.0",
+            "message": "Static files not found. Run in development mode or build frontend first."
+        }
 
 
 if __name__ == "__main__":
