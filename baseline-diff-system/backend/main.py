@@ -5,17 +5,20 @@ FastAPI 后端主文件
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 import os
 import sys
 import traceback
+import asyncio
+import json
 
 import database
 import manifest_parser
 import git_scanner
 import diff_analyzer
+from progress_tracker import progress_tracker
 
 
 app = FastAPI(title="Baseline Diff System API", version="1.0.0")
@@ -88,12 +91,33 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
         if not os.path.exists(vendor_path):
             raise HTTPException(status_code=400, detail=f"Vendor 路径不存在: {vendor_path}")
 
+        # 初始化进度跟踪
+        progress_tracker.reset()
+        progress_tracker.start(total_steps=5)
+        progress_tracker.update(
+            stage="initializing",
+            stage_name="初始化",
+            current_step=0,
+            message="准备开始扫描..."
+        )
+        await progress_tracker.notify_subscribers()
+
         # 清空旧数据
         print("清空旧数据...")
         database.clear_all_commits()
+        progress_tracker.update(current_step=1, message="已清空旧数据")
+        await progress_tracker.notify_subscribers()
 
         # 1. 解析 AOSP manifest
         print(f"\n=== 解析 AOSP Manifest ===")
+        progress_tracker.update(
+            stage="manifest_parsing",
+            stage_name="解析 Manifest",
+            current_step=1,
+            message="正在解析 AOSP manifest..."
+        )
+        await progress_tracker.notify_subscribers()
+
         aosp_projects = manifest_parser.parse_manifest(aosp_path)
         print(f"✓ AOSP: {len(aosp_projects)} 个项目")
 
@@ -103,6 +127,12 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
 
         # 2. 解析 Vendor manifest
         print(f"\n=== 解析 Vendor Manifest ===")
+        progress_tracker.update(
+            current_step=2,
+            message=f"正在解析 Vendor manifest... (AOSP: {len(aosp_projects)} 个项目)"
+        )
+        await progress_tracker.notify_subscribers()
+
         vendor_projects = manifest_parser.parse_manifest(vendor_path)
         print(f"✓ Vendor: {len(vendor_projects)} 个项目")
 
@@ -112,6 +142,14 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
 
         # 3. 扫描 AOSP git log
         print(f"\n=== 扫描 AOSP Git Log ===")
+        progress_tracker.update(
+            stage="git_scanning",
+            stage_name="扫描 Git Log",
+            current_step=3,
+            message=f"正在扫描 AOSP git log... ({len(aosp_projects)} 个项目)"
+        )
+        await progress_tracker.notify_subscribers()
+
         aosp_commits = git_scanner.scan_all_projects(aosp_projects)
         print(f"✓ AOSP 扫描完成：{len(aosp_commits)} 个 commits")
 
@@ -123,6 +161,12 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
 
         # 4. 扫描 Vendor git log
         print(f"\n=== 扫描 Vendor Git Log ===")
+        progress_tracker.update(
+            current_step=4,
+            message=f"正在扫描 Vendor git log... ({len(vendor_projects)} 个项目, 已扫描 {len(aosp_commits)} 个 AOSP commits)"
+        )
+        await progress_tracker.notify_subscribers()
+
         vendor_commits = git_scanner.scan_all_projects(vendor_projects)
         print(f"✓ Vendor 扫描完成：{len(vendor_commits)} 个 commits")
 
@@ -134,6 +178,14 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
 
         # 5. 差异分析
         print(f"\n=== 执行差异分析 ===")
+        progress_tracker.update(
+            stage="diff_analysis",
+            stage_name="差异分析",
+            current_step=5,
+            message=f"正在分析差异... (共 {len(aosp_commits) + len(vendor_commits)} 个 commits)"
+        )
+        await progress_tracker.notify_subscribers()
+
         aosp_project_names = [p['name'] for p in aosp_projects]
         vendor_project_names = [p['name'] for p in vendor_projects]
 
@@ -151,6 +203,12 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
             print("  3. 项目是否为 Git 仓库")
             print("  4. Git 仓库是否包含 commits")
 
+        # 标记为完成
+        progress_tracker.complete(
+            f"扫描完成！共处理 {total_scanned} 个 commits"
+        )
+        await progress_tracker.notify_subscribers()
+
         return {
             "success": True,
             "message": "扫描完成" if total_scanned > 0 else "扫描完成，但未找到任何 commits",
@@ -166,6 +224,9 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
     except Exception as e:
         print(f"✗ 扫描失败: {e}")
         traceback.print_exc()
+        # 标记为错误
+        progress_tracker.error(f"扫描失败: {str(e)}")
+        await progress_tracker.notify_subscribers()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -379,6 +440,55 @@ async def get_stats():
     except Exception as e:
         print(f"✗ 获取统计失败: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/progress")
+async def get_progress():
+    """获取当前进度（轮询模式）"""
+    return progress_tracker.get_progress()
+
+
+@app.get("/api/progress/stream")
+async def progress_stream():
+    """
+    SSE 端点：实时推送进度更新
+    """
+    async def event_generator():
+        queue = asyncio.Queue()
+        await progress_tracker.subscribe(queue)
+
+        try:
+            # 首先发送当前进度
+            current_progress = progress_tracker.get_progress()
+            yield f"data: {json.dumps(current_progress)}\n\n"
+
+            # 持续发送更新
+            while True:
+                try:
+                    # 等待进度更新，超时60秒
+                    progress = await asyncio.wait_for(queue.get(), timeout=60.0)
+                    yield f"data: {json.dumps(progress)}\n\n"
+
+                    # 如果任务完成或出错，关闭连接
+                    if progress.get("stage") in ["completed", "error"]:
+                        break
+                except asyncio.TimeoutError:
+                    # 发送心跳包
+                    yield f": heartbeat\n\n"
+                    continue
+
+        finally:
+            await progress_tracker.unsubscribe(queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # 禁用 nginx 缓冲
+        }
+    )
 
 
 @app.get("/api/health")
