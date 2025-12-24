@@ -27,14 +27,14 @@ const CommitTable = ({ commits, categories, onCategoriesChange }) => {
       title: 'Project',
       dataIndex: 'project',
       key: 'project',
-      width: 200,
+      width: 180,
       ellipsis: true,
     },
     {
       title: 'Hash',
       dataIndex: 'hash',
       key: 'hash',
-      width: 120,
+      width: 100,
       render: (hash, record) => (
         record.url ? (
           <Link href={record.url} target="_blank">
@@ -56,14 +56,31 @@ const CommitTable = ({ commits, categories, onCategoriesChange }) => {
       title: 'Date',
       dataIndex: 'date',
       key: 'date',
-      width: 180,
+      width: 110,
+      render: (date) => date.substring(0, 10), // 只显示日期部分
     },
     {
-      title: 'Subject',
-      dataIndex: 'subject',
-      key: 'subject',
-      ellipsis: true,
-      width: 300,
+      title: 'Commit Info',
+      key: 'commit_info',
+      render: (_, record) => (
+        <Space direction="vertical" size={4} style={{ width: '100%' }}>
+          <Text strong>{record.subject}</Text>
+          <Text type="secondary" style={{ fontSize: '12px' }}>
+            Change-Id: {record.change_id || '(无)'}
+          </Text>
+          <pre style={{
+            whiteSpace: 'pre-wrap',
+            margin: 0,
+            fontSize: '12px',
+            color: '#666',
+            fontFamily: 'inherit',
+            maxHeight: '120px',
+            overflow: 'auto'
+          }}>
+            {record.message || '(无详细信息)'}
+          </pre>
+        </Space>
+      ),
     },
     {
       title: 'Source',
@@ -79,7 +96,7 @@ const CommitTable = ({ commits, categories, onCategoriesChange }) => {
     {
       title: 'Categories',
       key: 'categories',
-      width: 250,
+      width: 200,
       render: (_, record) => {
         const selectedIds = record.categories.map((c) => c.id);
         return (
@@ -105,28 +122,12 @@ const CommitTable = ({ commits, categories, onCategoriesChange }) => {
       dataSource={commits}
       rowKey="hash"
       pagination={{
-        pageSize: 50,
+        pageSize: 20,
+        pageSizeOptions: ['10', '20', '50', '100'],
         showSizeChanger: true,
         showTotal: (total) => `共 ${total} 条`,
       }}
-      expandable={{
-        expandedRowRender: (record) => (
-          <div style={{ padding: 16, background: '#f5f5f5' }}>
-            <Space direction="vertical" style={{ width: '100%' }}>
-              <div>
-                <Text strong>Change-Id:</Text> {record.change_id || '(无)'}
-              </div>
-              <div>
-                <Text strong>Message:</Text>
-                <pre style={{ whiteSpace: 'pre-wrap', marginTop: 8 }}>
-                  {record.message || '(无)'}
-                </pre>
-              </div>
-            </Space>
-          </div>
-        ),
-      }}
-      scroll={{ x: 1500 }}
+      scroll={{ x: 1200 }}
     />
   );
 };
