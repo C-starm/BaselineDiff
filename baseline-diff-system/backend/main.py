@@ -261,38 +261,34 @@ async def get_commits(
     :param offset: 偏移量，用于分页
     """
     try:
-        # 获取总数
-        total_count = database.get_commits_count()
+        # 获取筛选后的总数（在数据库层面筛选）
+        total_count = database.get_commits_count(
+            source=source,
+            project=project,
+            author=author,
+            search=search
+        )
 
-        # 获取分页数据
-        commits = database.get_all_commits(limit=limit, offset=offset)
+        # 获取筛选后的分页数据（在数据库层面筛选）
+        commits = database.get_all_commits(
+            limit=limit,
+            offset=offset,
+            source=source,
+            project=project,
+            author=author,
+            search=search
+        )
 
-        # 应用筛选
-        if source:
-            commits = [c for c in commits if c['source'] == source]
-
-        if project:
-            commits = [c for c in commits if c['project'] == project]
-
-        if author:
-            commits = [c for c in commits if author.lower() in c['author'].lower()]
-
+        # 仅对 category_id 在 Python 层面筛选（暂未在数据库层实现）
         if category_id:
             commits = [
                 c for c in commits
                 if any(cat['id'] == category_id for cat in c['categories'])
             ]
 
-        if search:
-            search_lower = search.lower()
-            commits = [
-                c for c in commits
-                if search_lower in c['subject'].lower() or search_lower in c['message'].lower()
-            ]
-
         return {
             "success": True,
-            "total": total_count,  # 总记录数
+            "total": total_count,  # 筛选后的总记录数
             "count": len(commits),  # 当前返回的记录数
             "limit": limit,
             "offset": offset,

@@ -64,15 +64,51 @@ def update_commit_source(hash: str, source: str):
         conn.commit()
 
 
-def get_all_commits(limit: Optional[int] = None, offset: Optional[int] = None) -> List[Dict]:
+def get_all_commits(
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    source: Optional[str] = None,
+    project: Optional[str] = None,
+    author: Optional[str] = None,
+    search: Optional[str] = None
+) -> List[Dict]:
     """
-    获取所有 commit 及其分类
-    :param limit: 限制返回的记录数（用于分页）
-    :param offset: 偏移量（用于分页）
+    获取 commits，支持筛选和分页
+    :param limit: 限制返回的记录数
+    :param offset: 偏移量
+    :param source: 按来源筛选
+    :param project: 按项目筛选
+    :param author: 按作者筛选（模糊匹配）
+    :param search: 搜索标题或消息（模糊匹配）
     """
     with get_db() as conn:
+        # 构建 WHERE 条件
+        where_conditions = []
+        params = []
+
+        if source:
+            where_conditions.append("c.source = ?")
+            params.append(source)
+
+        if project:
+            where_conditions.append("c.project = ?")
+            params.append(project)
+
+        if author:
+            where_conditions.append("c.author LIKE ?")
+            params.append(f"%{author}%")
+
+        if search:
+            where_conditions.append("(c.subject LIKE ? OR c.message LIKE ?)")
+            params.append(f"%{search}%")
+            params.append(f"%{search}%")
+
+        where_clause = ""
+        if where_conditions:
+            where_clause = "WHERE " + " AND ".join(where_conditions)
+
         # 构建 SQL 查询
-        sql = """
+        sql = f"""
             SELECT
                 c.id, c.project, c.hash, c.change_id, c.author, c.date,
                 c.subject, c.message, c.source,
@@ -83,6 +119,7 @@ def get_all_commits(limit: Optional[int] = None, offset: Optional[int] = None) -
             LEFT JOIN manifests m ON c.project = m.project
             LEFT JOIN commit_categories cc ON c.hash = cc.commit_hash
             LEFT JOIN categories cat ON cc.category_id = cat.id
+            {where_clause}
             GROUP BY c.hash
             ORDER BY c.date DESC
         """
@@ -93,7 +130,7 @@ def get_all_commits(limit: Optional[int] = None, offset: Optional[int] = None) -
         if offset is not None:
             sql += f" OFFSET {offset}"
 
-        cursor = conn.execute(sql)
+        cursor = conn.execute(sql, params)
 
         commits = []
         for row in cursor.fetchall():
@@ -121,10 +158,47 @@ def get_all_commits(limit: Optional[int] = None, offset: Optional[int] = None) -
         return commits
 
 
-def get_commits_count() -> int:
-    """获取 commits 总数"""
+def get_commits_count(
+    source: Optional[str] = None,
+    project: Optional[str] = None,
+    author: Optional[str] = None,
+    search: Optional[str] = None
+) -> int:
+    """
+    获取 commits 总数（支持筛选）
+    :param source: 按来源筛选
+    :param project: 按项目筛选
+    :param author: 按作者筛选
+    :param search: 搜索关键字
+    """
     with get_db() as conn:
-        cursor = conn.execute("SELECT COUNT(*) as count FROM commits")
+        # 构建 WHERE 条件
+        where_conditions = []
+        params = []
+
+        if source:
+            where_conditions.append("source = ?")
+            params.append(source)
+
+        if project:
+            where_conditions.append("project = ?")
+            params.append(project)
+
+        if author:
+            where_conditions.append("author LIKE ?")
+            params.append(f"%{author}%")
+
+        if search:
+            where_conditions.append("(subject LIKE ? OR message LIKE ?)")
+            params.append(f"%{search}%")
+            params.append(f"%{search}%")
+
+        where_clause = ""
+        if where_conditions:
+            where_clause = "WHERE " + " AND ".join(where_conditions)
+
+        sql = f"SELECT COUNT(*) as count FROM commits {where_clause}"
+        cursor = conn.execute(sql, params)
         return cursor.fetchone()['count']
 
 
