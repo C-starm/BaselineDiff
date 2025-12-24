@@ -91,6 +91,21 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
         if not os.path.exists(vendor_path):
             raise HTTPException(status_code=400, detail=f"Vendor 路径不存在: {vendor_path}")
 
+        # 验证 manifest.xml 是否存在
+        aosp_manifest = os.path.join(aosp_path, ".repo", "manifest.xml")
+        vendor_manifest = os.path.join(vendor_path, ".repo", "manifest.xml")
+
+        if not os.path.exists(aosp_manifest):
+            raise HTTPException(
+                status_code=400,
+                detail=f"AOSP manifest.xml 不存在: {aosp_manifest}\n请确保这是一个有效的 repo 仓库（需要先执行 repo sync）"
+            )
+        if not os.path.exists(vendor_manifest):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Vendor manifest.xml 不存在: {vendor_manifest}\n请确保这是一个有效的 repo 仓库（需要先执行 repo sync）"
+            )
+
         # 初始化进度跟踪
         progress_tracker.reset()
         progress_tracker.start(total_steps=5)

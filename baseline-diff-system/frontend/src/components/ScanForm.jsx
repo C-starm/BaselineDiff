@@ -68,24 +68,26 @@ const ScanForm = ({ onScanComplete }) => {
           layout="vertical"
           onFinish={handleScan}
           initialValues={{
-            aospPath: '/path/to/aosp',
-            vendorPath: '/path/to/vendor',
+            aospPath: '',
+            vendorPath: '',
           }}
         >
           <Form.Item
             label="AOSP 仓库路径"
             name="aospPath"
             rules={[{ required: true, message: '请输入 AOSP 路径' }]}
+            tooltip="包含 .repo/manifest.xml 的 AOSP 仓库根目录"
           >
-            <Input placeholder="/path/to/aosp" />
+            <Input placeholder="例如: /home/user/aosp" />
           </Form.Item>
 
           <Form.Item
             label="Vendor 仓库路径"
             name="vendorPath"
             rules={[{ required: true, message: '请输入 Vendor 路径' }]}
+            tooltip="包含 .repo/manifest.xml 的 Vendor 仓库根目录"
           >
-            <Input placeholder="/path/to/vendor" />
+            <Input placeholder="例如: /home/user/vendor" />
           </Form.Item>
 
           <Form.Item>
