@@ -128,6 +128,20 @@ def get_commits_count() -> int:
         return cursor.fetchone()['count']
 
 
+def get_unique_projects() -> List[str]:
+    """获取所有唯一的项目名称"""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT DISTINCT project FROM commits ORDER BY project")
+        return [row['project'] for row in cursor.fetchall()]
+
+
+def get_unique_authors() -> List[str]:
+    """获取所有唯一的作者"""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT DISTINCT author FROM commits ORDER BY author")
+        return [row['author'] for row in cursor.fetchall()]
+
+
 def get_commits_by_change_id(change_id: str) -> List[str]:
     """根据 Change-Id 获取所有 commit hash"""
     with get_db() as conn:

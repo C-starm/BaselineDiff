@@ -3,7 +3,7 @@ import { Layout, Row, Col, Card, Statistic, Input, Button, Space, message } from
 import ScanForm from './components/ScanForm';
 import FilterPanel from './components/FilterPanel';
 import CommitTable from './components/CommitTable';
-import { getCommits, getCategories, addCategory, getStats } from './api/client';
+import { getCommits, getCategories, addCategory, getStats, getMetadata } from './api/client';
 
 const { Header, Content } = Layout;
 
@@ -14,6 +14,8 @@ function App() {
   const [stats, setStats] = useState({});
   const [totalCommits, setTotalCommits] = useState(0);  // 总记录数
   const [displayedCount, setDisplayedCount] = useState(0);  // 显示的记录数
+  const [projects, setProjects] = useState([]);  // 所有项目列表
+  const [authors, setAuthors] = useState([]);  // 所有作者列表
   const [filters, setFilters] = useState({
     source: undefined,
     project: undefined,
@@ -65,11 +67,23 @@ function App() {
     }
   };
 
+  // 加载元数据（项目列表、作者列表）
+  const loadMetadata = async () => {
+    try {
+      const result = await getMetadata();
+      setProjects(result.projects || []);
+      setAuthors(result.authors || []);
+    } catch (error) {
+      console.error('加载元数据失败:', error);
+    }
+  };
+
   // 初始加载
   useEffect(() => {
     loadCategories();
     loadCommits();
     loadStats();
+    loadMetadata();
   }, []);
 
   // 应用筛选
@@ -112,6 +126,7 @@ function App() {
   const handleScanComplete = () => {
     loadCommits();
     loadStats();
+    loadMetadata();
   };
 
   // 重置筛选
@@ -143,10 +158,6 @@ function App() {
     }
   };
 
-  // 提取唯一的 projects 和 authors
-  const uniqueProjects = [...new Set(commits.map((c) => c.project))];
-  const uniqueAuthors = [...new Set(commits.map((c) => c.author))];
-
   return (
     <Layout style={{ minHeight: '100vh' }}>
       <Header style={{ background: '#001529', color: 'white', fontSize: 24, fontWeight: 'bold' }}>
@@ -172,8 +183,8 @@ function App() {
               filters={filters}
               onFilterChange={setFilters}
               categories={categories}
-              projects={uniqueProjects}
-              authors={uniqueAuthors}
+              projects={projects}
+              authors={authors}
               onReset={handleResetFilters}
             />
 

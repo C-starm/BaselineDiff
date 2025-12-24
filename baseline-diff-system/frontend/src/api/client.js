@@ -53,4 +53,9 @@ export const getStats = async () => {
   return response.data;
 };
 
+export const getMetadata = async () => {
+  const response = await client.get('/metadata');
+  return response.data;
+};
+
 export default client;

@@ -305,6 +305,28 @@ async def get_commits(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/metadata")
+async def get_metadata():
+    """
+    获取元数据（项目列表、作者列表等）
+    用于填充筛选器下拉列表
+    """
+    try:
+        projects = database.get_unique_projects()
+        authors = database.get_unique_authors()
+
+        return {
+            "success": True,
+            "projects": projects,
+            "authors": authors
+        }
+
+    except Exception as e:
+        print(f"✗ 获取元数据失败: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/set_categories")
 async def set_categories(request: SetCategoriesRequest):
     """
