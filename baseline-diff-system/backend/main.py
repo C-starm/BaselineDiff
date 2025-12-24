@@ -517,22 +517,34 @@ async def reanalyze_diff():
 @app.get("/api/stats")
 async def get_stats():
     """
-    获取统计信息
+    获取统计信息（直接从数据库查询，不加载所有数据）
     """
     try:
-        commits = database.get_all_commits()
+        with database.get_db() as conn:
+            # 获取总数
+            cursor = conn.execute("SELECT COUNT(*) as count FROM commits")
+            total_commits = cursor.fetchone()['count']
+
+            # 按 source 分组统计
+            cursor = conn.execute("""
+                SELECT source, COUNT(*) as count
+                FROM commits
+                GROUP BY source
+            """)
+            source_counts = {row['source']: row['count'] for row in cursor.fetchall()}
 
         stats = {
-            "total_commits": len(commits),
-            "common": len([c for c in commits if c['source'] == 'common']),
-            "aosp_only": len([c for c in commits if c['source'] == 'aosp_only']),
-            "vendor_only": len([c for c in commits if c['source'] == 'vendor_only']),
+            "total_commits": total_commits,
+            "common": source_counts.get('common', 0),
+            "aosp_only": source_counts.get('aosp_only', 0),
+            "vendor_only": source_counts.get('vendor_only', 0),
         }
 
         return {"success": True, "stats": stats}
 
     except Exception as e:
         print(f"✗ 获取统计失败: {e}")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
