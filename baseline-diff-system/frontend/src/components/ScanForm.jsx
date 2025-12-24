@@ -12,40 +12,50 @@ const ScanForm = ({ onScanComplete }) => {
   const handleScan = async (values) => {
     setLoading(true);
     setShowProgress(true);  // 显示进度监视器
+    console.log('🚀 开始扫描仓库...', values);
     try {
       const result = await scanRepos(values.aospPath, values.vendorPath);
       message.success('扫描完成！');
-      console.log('扫描结果:', result);
+      console.log('✅ 扫描结果:', result);
       if (onScanComplete) {
         onScanComplete(result);
       }
     } catch (error) {
-      console.error('扫描失败:', error);
+      console.error('❌ 扫描失败:', error);
       message.error(`扫描失败: ${error.response?.data?.detail || error.message}`);
     } finally {
       setLoading(false);
+      console.log('🏁 扫描流程结束，3秒后隐藏进度监视器');
       // 延迟隐藏进度监视器，让用户看到完成状态
-      setTimeout(() => setShowProgress(false), 3000);
+      setTimeout(() => {
+        setShowProgress(false);
+        console.log('👋 进度监视器已隐藏');
+      }, 3000);
     }
   };
 
   const handleReanalyze = async () => {
     setReanalyzing(true);
     setShowProgress(true);  // 显示进度监视器
+    console.log('🔄 开始重新分析差异...');
     try {
       const result = await reanalyzeDiff();
       message.success('差异分析完成！');
-      console.log('分析结果:', result);
+      console.log('✅ 分析结果:', result);
       if (onScanComplete) {
         onScanComplete(result);
       }
     } catch (error) {
-      console.error('差异分析失败:', error);
+      console.error('❌ 差异分析失败:', error);
       message.error(`差异分析失败: ${error.response?.data?.detail || error.message}`);
     } finally {
       setReanalyzing(false);
+      console.log('🏁 分析流程结束，3秒后隐藏进度监视器');
       // 延迟隐藏进度监视器，让用户看到完成状态
-      setTimeout(() => setShowProgress(false), 3000);
+      setTimeout(() => {
+        setShowProgress(false);
+        console.log('👋 进度监视器已隐藏');
+      }, 3000);
     }
   };
 

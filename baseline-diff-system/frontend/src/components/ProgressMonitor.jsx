@@ -29,6 +29,7 @@ const ProgressMonitor = ({ visible = false }) => {
     eventSource.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log('📊 进度更新:', data);  // 添加日志
         setProgress(data);
       } catch (error) {
         console.error('Failed to parse progress data:', error);
@@ -36,8 +37,12 @@ const ProgressMonitor = ({ visible = false }) => {
     };
 
     eventSource.onerror = (error) => {
-      console.error('SSE Error:', error);
+      console.error('❌ SSE 连接错误:', error);
       eventSource.close();
+    };
+
+    eventSource.onopen = () => {
+      console.log('✅ SSE 连接已建立');
     };
 
     // 清理函数
