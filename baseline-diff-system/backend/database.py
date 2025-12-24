@@ -91,57 +91,61 @@ def get_all_commits(
         params = []
 
         if source:
-            where_conditions.append("c.source = ?")
+            where_conditions.append("source = ?")
             params.append(source)
 
         if project:
-            where_conditions.append("c.project = ?")
+            where_conditions.append("project = ?")
             params.append(project)
 
         if author:
-            where_conditions.append("c.author LIKE ?")
+            where_conditions.append("author LIKE ?")
             params.append(f"%{author}%")
 
         if search:
-            where_conditions.append("(c.subject LIKE ? OR c.message LIKE ?)")
+            where_conditions.append("(subject LIKE ? OR message LIKE ?)")
             params.append(f"%{search}%")
             params.append(f"%{search}%")
 
         if date_from:
-            where_conditions.append("c.date >= ?")
+            where_conditions.append("date >= ?")
             params.append(date_from)
 
         if date_to:
             # 包含结束日期当天，所以加一天
-            where_conditions.append("c.date < date(?, '+1 day')")
+            where_conditions.append("date < date(?, '+1 day')")
             params.append(date_to)
 
         where_clause = ""
         if where_conditions:
             where_clause = "WHERE " + " AND ".join(where_conditions)
 
-        # 构建 SQL 查询
+        # 优化的 SQL 查询：先筛选分页，再 JOIN
+        # 使用子查询避免在全表上做 GROUP BY
         sql = f"""
+            WITH filtered_commits AS (
+                SELECT
+                    id, project, hash, change_id, author, date,
+                    subject, message, source
+                FROM commits
+                {where_clause}
+                ORDER BY date DESC
+                {"LIMIT " + str(limit) if limit is not None else ""}
+                {"OFFSET " + str(offset) if offset is not None else ""}
+            )
             SELECT
-                c.id, c.project, c.hash, c.change_id, c.author, c.date,
-                c.subject, c.message, c.source,
+                fc.id, fc.project, fc.hash, fc.change_id, fc.author, fc.date,
+                fc.subject, fc.message, fc.source,
                 m.remote_url,
                 GROUP_CONCAT(cat.id) as category_ids,
                 GROUP_CONCAT(cat.name) as category_names
-            FROM commits c
-            LEFT JOIN manifests m ON c.project = m.project
-            LEFT JOIN commit_categories cc ON c.hash = cc.commit_hash
+            FROM filtered_commits fc
+            LEFT JOIN manifests m ON fc.project = m.project
+            LEFT JOIN commit_categories cc ON fc.hash = cc.commit_hash
             LEFT JOIN categories cat ON cc.category_id = cat.id
-            {where_clause}
-            GROUP BY c.hash
-            ORDER BY c.date DESC
+            GROUP BY fc.hash
+            ORDER BY fc.date DESC
         """
-
-        # 添加分页参数
-        if limit is not None:
-            sql += f" LIMIT {limit}"
-        if offset is not None:
-            sql += f" OFFSET {offset}"
 
         cursor = conn.execute(sql, params)
 
