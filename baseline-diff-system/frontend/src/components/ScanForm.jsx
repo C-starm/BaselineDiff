@@ -31,6 +31,7 @@ const ScanForm = ({ onScanComplete }) => {
 
   const handleReanalyze = async () => {
     setReanalyzing(true);
+    setShowProgress(true);  // 显示进度监视器
     try {
       const result = await reanalyzeDiff();
       message.success('差异分析完成！');
@@ -43,6 +44,8 @@ const ScanForm = ({ onScanComplete }) => {
       message.error(`差异分析失败: ${error.response?.data?.detail || error.message}`);
     } finally {
       setReanalyzing(false);
+      // 延迟隐藏进度监视器，让用户看到完成状态
+      setTimeout(() => setShowProgress(false), 3000);
     }
   };
 

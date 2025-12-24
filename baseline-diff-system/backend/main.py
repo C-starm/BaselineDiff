@@ -350,20 +350,43 @@ async def reanalyze_diff():
     适用于之前扫描在差异分析阶段失败的情况
     """
     try:
+        # 初始化进度跟踪
+        progress_tracker.reset()
+        progress_tracker.start(total_steps=3)
+        progress_tracker.update(
+            stage="initializing",
+            stage_name="初始化",
+            current_step=0,
+            message="准备重新分析差异..."
+        )
+        await progress_tracker.notify_subscribers()
+
         # 检查数据库中是否有数据
         commits = database.get_all_commits()
         if not commits:
+            progress_tracker.error("数据库中没有 commits 数据")
+            await progress_tracker.notify_subscribers()
             raise HTTPException(
                 status_code=400,
                 detail="数据库中没有 commits 数据，请先执行完整扫描"
             )
 
         # 从数据库获取所有项目
+        progress_tracker.update(
+            stage="manifest_parsing",
+            stage_name="加载数据",
+            current_step=1,
+            message=f"正在加载数据库中的 {len(commits)} 个 commits..."
+        )
+        await progress_tracker.notify_subscribers()
+
         with database.get_db() as conn:
             cursor = conn.execute("SELECT DISTINCT project FROM manifests")
             all_projects = [row['project'] for row in cursor.fetchall()]
 
         if not all_projects:
+            progress_tracker.error("数据库中没有 manifest 数据")
+            await progress_tracker.notify_subscribers()
             raise HTTPException(
                 status_code=400,
                 detail="数据库中没有 manifest 数据，请先执行完整扫描"
@@ -376,6 +399,14 @@ async def reanalyze_diff():
         # 简单策略：根据项目名称区分 AOSP 和 Vendor
         # 这里假设项目名包含特定关键字来区分
         # 用户可以根据实际情况调整这个逻辑
+        progress_tracker.update(
+            stage="diff_analysis",
+            stage_name="差异分析",
+            current_step=2,
+            message=f"正在分析 {len(all_projects)} 个项目的差异..."
+        )
+        await progress_tracker.notify_subscribers()
+
         aosp_projects = [p for p in all_projects if 'aosp' in p.lower()]
         vendor_projects = [p for p in all_projects if 'vendor' in p.lower()]
 
@@ -395,6 +426,12 @@ async def reanalyze_diff():
             stats = diff_analyzer.analyze_diff(aosp_projects, vendor_projects)
 
         # 重新获取统计信息
+        progress_tracker.update(
+            current_step=3,
+            message="正在统计分析结果..."
+        )
+        await progress_tracker.notify_subscribers()
+
         commits = database.get_all_commits()
         updated_stats = {
             "total_commits": len(commits),
@@ -402,6 +439,12 @@ async def reanalyze_diff():
             "aosp_only": len([c for c in commits if c['source'] == 'aosp_only']),
             "vendor_only": len([c for c in commits if c['source'] == 'vendor_only']),
         }
+
+        # 标记为完成
+        progress_tracker.complete(
+            f"差异分析完成！共分析 {len(commits)} 个 commits"
+        )
+        await progress_tracker.notify_subscribers()
 
         return {
             "success": True,
@@ -417,6 +460,9 @@ async def reanalyze_diff():
     except Exception as e:
         print(f"✗ 差异分析失败: {e}")
         traceback.print_exc()
+        # 标记为错误
+        progress_tracker.error(f"差异分析失败: {str(e)}")
+        await progress_tracker.notify_subscribers()
         raise HTTPException(status_code=500, detail=str(e))
 
 
