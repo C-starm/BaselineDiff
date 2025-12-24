@@ -252,6 +252,8 @@ async def get_commits(
     author: Optional[str] = None,
     category_id: Optional[int] = None,
     search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     limit: Optional[int] = 1000,
     offset: Optional[int] = 0
 ):
@@ -259,6 +261,8 @@ async def get_commits(
     获取 commits，支持筛选和分页
     :param limit: 返回的最大记录数，默认 1000（防止数据量过大）
     :param offset: 偏移量，用于分页
+    :param date_from: 起始日期（YYYY-MM-DD）
+    :param date_to: 结束日期（YYYY-MM-DD）
     """
     try:
         # 获取筛选后的总数（在数据库层面筛选）
@@ -266,7 +270,9 @@ async def get_commits(
             source=source,
             project=project,
             author=author,
-            search=search
+            search=search,
+            date_from=date_from,
+            date_to=date_to
         )
 
         # 获取筛选后的分页数据（在数据库层面筛选）
@@ -276,7 +282,9 @@ async def get_commits(
             source=source,
             project=project,
             author=author,
-            search=search
+            search=search,
+            date_from=date_from,
+            date_to=date_to
         )
 
         # 仅对 category_id 在 Python 层面筛选（暂未在数据库层实现）

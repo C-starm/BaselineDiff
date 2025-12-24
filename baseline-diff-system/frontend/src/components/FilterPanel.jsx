@@ -1,7 +1,9 @@
 import React from 'react';
-import { Card, Select, Input, Button, Space } from 'antd';
+import { Card, Select, Input, Button, Space, DatePicker } from 'antd';
+import dayjs from 'dayjs';
 
 const { Option } = Select;
+const { RangePicker } = DatePicker;
 
 const FilterPanel = ({
   filters,
@@ -85,6 +87,31 @@ const FilterPanel = ({
               </Option>
             ))}
           </Select>
+        </div>
+
+        <div>
+          <div style={{ marginBottom: 8, fontWeight: 'bold' }}>提交时间</div>
+          <RangePicker
+            style={{ width: '100%' }}
+            placeholder={['开始日期', '结束日期']}
+            format="YYYY-MM-DD"
+            value={
+              filters.dateRange && filters.dateRange[0] && filters.dateRange[1]
+                ? [dayjs(filters.dateRange[0]), dayjs(filters.dateRange[1])]
+                : null
+            }
+            onChange={(dates) => {
+              if (dates && dates[0] && dates[1]) {
+                handleChange('dateRange', [
+                  dates[0].format('YYYY-MM-DD'),
+                  dates[1].format('YYYY-MM-DD')
+                ]);
+              } else {
+                handleChange('dateRange', null);
+              }
+            }}
+            allowClear
+          />
         </div>
 
         <div>

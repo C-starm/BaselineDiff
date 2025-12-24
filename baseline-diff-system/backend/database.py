@@ -70,7 +70,9 @@ def get_all_commits(
     source: Optional[str] = None,
     project: Optional[str] = None,
     author: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
 ) -> List[Dict]:
     """
     获取 commits，支持筛选和分页
@@ -80,6 +82,8 @@ def get_all_commits(
     :param project: 按项目筛选
     :param author: 按作者筛选（模糊匹配）
     :param search: 搜索标题或消息（模糊匹配）
+    :param date_from: 起始日期（格式：YYYY-MM-DD）
+    :param date_to: 结束日期（格式：YYYY-MM-DD）
     """
     with get_db() as conn:
         # 构建 WHERE 条件
@@ -102,6 +106,15 @@ def get_all_commits(
             where_conditions.append("(c.subject LIKE ? OR c.message LIKE ?)")
             params.append(f"%{search}%")
             params.append(f"%{search}%")
+
+        if date_from:
+            where_conditions.append("c.date >= ?")
+            params.append(date_from)
+
+        if date_to:
+            # 包含结束日期当天，所以加一天
+            where_conditions.append("c.date < date(?, '+1 day')")
+            params.append(date_to)
 
         where_clause = ""
         if where_conditions:
@@ -162,7 +175,9 @@ def get_commits_count(
     source: Optional[str] = None,
     project: Optional[str] = None,
     author: Optional[str] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None
 ) -> int:
     """
     获取 commits 总数（支持筛选）
@@ -170,6 +185,8 @@ def get_commits_count(
     :param project: 按项目筛选
     :param author: 按作者筛选
     :param search: 搜索关键字
+    :param date_from: 起始日期（格式：YYYY-MM-DD）
+    :param date_to: 结束日期（格式：YYYY-MM-DD）
     """
     with get_db() as conn:
         # 构建 WHERE 条件
@@ -192,6 +209,14 @@ def get_commits_count(
             where_conditions.append("(subject LIKE ? OR message LIKE ?)")
             params.append(f"%{search}%")
             params.append(f"%{search}%")
+
+        if date_from:
+            where_conditions.append("date >= ?")
+            params.append(date_from)
+
+        if date_to:
+            where_conditions.append("date < date(?, '+1 day')")
+            params.append(date_to)
 
         where_clause = ""
         if where_conditions:

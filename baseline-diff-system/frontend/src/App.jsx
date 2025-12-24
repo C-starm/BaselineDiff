@@ -22,13 +22,28 @@ function App() {
     author: undefined,
     categoryIds: [],
     search: '',
+    dateRange: null,
   });
   const [customCategoryName, setCustomCategoryName] = useState('');
 
-  // 加载 commits
-  const loadCommits = async () => {
+  // 加载 commits（支持筛选）
+  const loadCommits = async (filterParams = {}) => {
     try {
-      const result = await getCommits();
+      // 构建 API 参数
+      const params = {
+        limit: 1000,
+        offset: 0,
+        ...filterParams
+      };
+
+      // 如果有日期范围，添加 date_from 和 date_to
+      if (filterParams.dateRange && filterParams.dateRange.length === 2) {
+        params.date_from = filterParams.dateRange[0];
+        params.date_to = filterParams.dateRange[1];
+        delete params.dateRange;
+      }
+
+      const result = await getCommits(params);
       setCommits(result.commits);
       setFilteredCommits(result.commits);
       setTotalCommits(result.total || 0);
@@ -86,41 +101,40 @@ function App() {
     loadMetadata();
   }, []);
 
-  // 应用筛选
+  // 应用筛选（使用后端 API）
   useEffect(() => {
-    let filtered = [...commits];
+    // 提取后端支持的筛选参数
+    const backendFilters = {
+      source: filters.source,
+      project: filters.project,
+      author: filters.author,
+      search: filters.search,
+      dateRange: filters.dateRange,
+    };
 
-    if (filters.source) {
-      filtered = filtered.filter((c) => c.source === filters.source);
-    }
+    // 调用后端 API 获取筛选后的数据
+    loadCommits(backendFilters);
+  }, [
+    filters.source,
+    filters.project,
+    filters.author,
+    filters.search,
+    filters.dateRange,
+  ]);
 
-    if (filters.project) {
-      filtered = filtered.filter((c) => c.project === filters.project);
-    }
-
-    if (filters.author) {
-      filtered = filtered.filter((c) => c.author.includes(filters.author));
-    }
-
+  // 对 categoryIds 进行客户端筛选（后端暂不支持）
+  useEffect(() => {
     if (filters.categoryIds && filters.categoryIds.length > 0) {
-      filtered = filtered.filter((c) =>
+      const filtered = commits.filter((c) =>
         filters.categoryIds.some((catId) =>
           c.categories.some((cc) => cc.id === catId)
         )
       );
+      setFilteredCommits(filtered);
+    } else {
+      setFilteredCommits(commits);
     }
-
-    if (filters.search) {
-      const searchLower = filters.search.toLowerCase();
-      filtered = filtered.filter(
-        (c) =>
-          c.subject.toLowerCase().includes(searchLower) ||
-          c.message.toLowerCase().includes(searchLower)
-      );
-    }
-
-    setFilteredCommits(filtered);
-  }, [filters, commits]);
+  }, [filters.categoryIds, commits]);
 
   // 扫描完成回调
   const handleScanComplete = () => {
@@ -137,6 +151,7 @@ function App() {
       author: undefined,
       categoryIds: [],
       search: '',
+      dateRange: null,
     });
   };
 
