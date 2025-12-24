@@ -15,6 +15,11 @@ export const scanRepos = async (aospPath, vendorPath) => {
   return response.data;
 };
 
+export const reanalyzeDiff = async () => {
+  const response = await client.post('/reanalyze_diff');
+  return response.data;
+};
+
 export const getCommits = async (filters = {}) => {
   const response = await client.get('/commits', { params: filters });
   return response.data;

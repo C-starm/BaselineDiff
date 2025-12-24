@@ -281,6 +281,84 @@ async def remove_category(request: RemoveCategoryRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/reanalyze_diff")
+async def reanalyze_diff():
+    """
+    重新执行差异分析（断点续传功能）
+    使用数据库中已有的 commits 和 manifests 数据
+    适用于之前扫描在差异分析阶段失败的情况
+    """
+    try:
+        # 检查数据库中是否有数据
+        commits = database.get_all_commits()
+        if not commits:
+            raise HTTPException(
+                status_code=400,
+                detail="数据库中没有 commits 数据，请先执行完整扫描"
+            )
+
+        # 从数据库获取所有项目
+        with database.get_db() as conn:
+            cursor = conn.execute("SELECT DISTINCT project FROM manifests")
+            all_projects = [row['project'] for row in cursor.fetchall()]
+
+        if not all_projects:
+            raise HTTPException(
+                status_code=400,
+                detail="数据库中没有 manifest 数据，请先执行完整扫描"
+            )
+
+        print(f"\n=== 重新执行差异分析 ===")
+        print(f"数据库中有 {len(commits)} 个 commits")
+        print(f"数据库中有 {len(all_projects)} 个项目")
+
+        # 简单策略：根据项目名称区分 AOSP 和 Vendor
+        # 这里假设项目名包含特定关键字来区分
+        # 用户可以根据实际情况调整这个逻辑
+        aosp_projects = [p for p in all_projects if 'aosp' in p.lower()]
+        vendor_projects = [p for p in all_projects if 'vendor' in p.lower()]
+
+        # 如果无法区分，则获取用户输入或使用全部项目
+        if not aosp_projects and not vendor_projects:
+            print("⚠ 无法自动区分 AOSP 和 Vendor 项目，将所有 commits 标记为 common")
+            diff_analyzer.simple_diff_analysis()
+            stats = {
+                "total_aosp": 0,
+                "total_vendor": 0,
+                "common": len(commits),
+                "aosp_only": 0,
+                "vendor_only": 0
+            }
+        else:
+            print(f"识别到 {len(aosp_projects)} 个 AOSP 项目，{len(vendor_projects)} 个 Vendor 项目")
+            stats = diff_analyzer.analyze_diff(aosp_projects, vendor_projects)
+
+        # 重新获取统计信息
+        commits = database.get_all_commits()
+        updated_stats = {
+            "total_commits": len(commits),
+            "common": len([c for c in commits if c['source'] == 'common']),
+            "aosp_only": len([c for c in commits if c['source'] == 'aosp_only']),
+            "vendor_only": len([c for c in commits if c['source'] == 'vendor_only']),
+        }
+
+        return {
+            "success": True,
+            "message": "差异分析完成",
+            "stats": {
+                "diff_stats": stats,
+                "updated_stats": updated_stats
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"✗ 差异分析失败: {e}")
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/stats")
 async def get_stats():
     """

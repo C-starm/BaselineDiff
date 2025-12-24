@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { Form, Input, Button, Card, message } from 'antd';
-import { scanRepos } from '../api/client';
+import { Form, Input, Button, Card, message, Space } from 'antd';
+import { scanRepos, reanalyzeDiff } from '../api/client';
 
 const ScanForm = ({ onScanComplete }) => {
   const [loading, setLoading] = useState(false);
+  const [reanalyzing, setReanalyzing] = useState(false);
   const [form] = Form.useForm();
 
   const handleScan = async (values) => {
@@ -20,6 +21,23 @@ const ScanForm = ({ onScanComplete }) => {
       message.error(`扫描失败: ${error.response?.data?.detail || error.message}`);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleReanalyze = async () => {
+    setReanalyzing(true);
+    try {
+      const result = await reanalyzeDiff();
+      message.success('差异分析完成！');
+      console.log('分析结果:', result);
+      if (onScanComplete) {
+        onScanComplete(result);
+      }
+    } catch (error) {
+      console.error('差异分析失败:', error);
+      message.error(`差异分析失败: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setReanalyzing(false);
     }
   };
 
@@ -51,9 +69,19 @@ const ScanForm = ({ onScanComplete }) => {
         </Form.Item>
 
         <Form.Item>
-          <Button type="primary" htmlType="submit" loading={loading} block>
-            {loading ? '扫描中...' : '开始扫描'}
-          </Button>
+          <Space style={{ width: '100%' }} direction="vertical">
+            <Button type="primary" htmlType="submit" loading={loading} block>
+              {loading ? '扫描中...' : '开始扫描'}
+            </Button>
+            <Button
+              type="default"
+              onClick={handleReanalyze}
+              loading={reanalyzing}
+              block
+            >
+              {reanalyzing ? '分析中...' : '重新分析差异（断点续传）'}
+            </Button>
+          </Space>
         </Form.Item>
       </Form>
     </Card>
