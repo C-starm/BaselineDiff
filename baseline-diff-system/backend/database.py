@@ -64,10 +64,15 @@ def update_commit_source(hash: str, source: str):
         conn.commit()
 
 
-def get_all_commits() -> List[Dict]:
-    """获取所有 commit 及其分类"""
+def get_all_commits(limit: Optional[int] = None, offset: Optional[int] = None) -> List[Dict]:
+    """
+    获取所有 commit 及其分类
+    :param limit: 限制返回的记录数（用于分页）
+    :param offset: 偏移量（用于分页）
+    """
     with get_db() as conn:
-        cursor = conn.execute("""
+        # 构建 SQL 查询
+        sql = """
             SELECT
                 c.id, c.project, c.hash, c.change_id, c.author, c.date,
                 c.subject, c.message, c.source,
@@ -80,7 +85,15 @@ def get_all_commits() -> List[Dict]:
             LEFT JOIN categories cat ON cc.category_id = cat.id
             GROUP BY c.hash
             ORDER BY c.date DESC
-        """)
+        """
+
+        # 添加分页参数
+        if limit is not None:
+            sql += f" LIMIT {limit}"
+        if offset is not None:
+            sql += f" OFFSET {offset}"
+
+        cursor = conn.execute(sql)
 
         commits = []
         for row in cursor.fetchall():
@@ -106,6 +119,13 @@ def get_all_commits() -> List[Dict]:
             commits.append(commit)
 
         return commits
+
+
+def get_commits_count() -> int:
+    """获取 commits 总数"""
+    with get_db() as conn:
+        cursor = conn.execute("SELECT COUNT(*) as count FROM commits")
+        return cursor.fetchone()['count']
 
 
 def get_commits_by_change_id(change_id: str) -> List[str]:

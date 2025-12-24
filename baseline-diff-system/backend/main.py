@@ -251,13 +251,21 @@ async def get_commits(
     project: Optional[str] = None,
     author: Optional[str] = None,
     category_id: Optional[int] = None,
-    search: Optional[str] = None
+    search: Optional[str] = None,
+    limit: Optional[int] = 1000,
+    offset: Optional[int] = 0
 ):
     """
-    获取所有 commits，支持筛选
+    获取 commits，支持筛选和分页
+    :param limit: 返回的最大记录数，默认 1000（防止数据量过大）
+    :param offset: 偏移量，用于分页
     """
     try:
-        commits = database.get_all_commits()
+        # 获取总数
+        total_count = database.get_commits_count()
+
+        # 获取分页数据
+        commits = database.get_all_commits(limit=limit, offset=offset)
 
         # 应用筛选
         if source:
@@ -284,7 +292,10 @@ async def get_commits(
 
         return {
             "success": True,
-            "total": len(commits),
+            "total": total_count,  # 总记录数
+            "count": len(commits),  # 当前返回的记录数
+            "limit": limit,
+            "offset": offset,
             "commits": commits
         }
 

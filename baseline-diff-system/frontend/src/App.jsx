@@ -12,6 +12,8 @@ function App() {
   const [filteredCommits, setFilteredCommits] = useState([]);
   const [categories, setCategories] = useState([]);
   const [stats, setStats] = useState({});
+  const [totalCommits, setTotalCommits] = useState(0);  // 总记录数
+  const [displayedCount, setDisplayedCount] = useState(0);  // 显示的记录数
   const [filters, setFilters] = useState({
     source: undefined,
     project: undefined,
@@ -27,8 +29,19 @@ function App() {
       const result = await getCommits();
       setCommits(result.commits);
       setFilteredCommits(result.commits);
+      setTotalCommits(result.total || 0);
+      setDisplayedCount(result.count || result.commits.length);
+
+      // 如果数据量很大，显示警告
+      if (result.total > 10000) {
+        message.warning(
+          `数据量较大（共 ${result.total.toLocaleString()} 条），当前仅显示前 ${result.count.toLocaleString()} 条记录。建议使用筛选功能。`,
+          10
+        );
+      }
     } catch (error) {
       console.error('加载 commits 失败:', error);
+      message.error('加载 commits 失败');
     }
   };
 
@@ -182,7 +195,11 @@ function App() {
           {/* 右侧：Commit 列表 */}
           <Col xs={24} lg={18}>
             <Card
-              title={`Commits 列表 (${filteredCommits.length} / ${commits.length})`}
+              title={
+                totalCommits > displayedCount
+                  ? `Commits 列表 (显示 ${filteredCommits.length.toLocaleString()} / 已加载 ${commits.length.toLocaleString()} / 总共 ${totalCommits.toLocaleString()})`
+                  : `Commits 列表 (${filteredCommits.length.toLocaleString()} / ${commits.length.toLocaleString()})`
+              }
               extra={
                 <Button onClick={loadCommits}>
                   刷新
