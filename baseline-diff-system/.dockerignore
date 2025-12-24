@@ -1,0 +1,35 @@
+# Node modules and frontend build artifacts
+frontend/node_modules
+frontend/.vite
+
+# Python virtual environment and cache
+backend/venv
+backend/__pycache__
+backend/**/__pycache__
+backend/*.pyc
+backend/**/*.pyc
+
+# PyInstaller build artifacts (will be generated fresh)
+backend/build
+backend/dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+README.md
+
+# Other build artifacts
+*.log

@@ -1,0 +1,24 @@
+# Dockerfile for building Linux x86_64 executable
+FROM --platform=linux/amd64 python:3.11-slim
+
+# 安装必要的构建工具
+RUN apt-get update && apt-get install -y \
+    binutils \
+    && rm -rf /var/lib/apt/lists/*
+
+# 设置工作目录
+WORKDIR /build
+
+# 复制后端代码和依赖
+COPY backend/ /build/backend/
+COPY backend/requirements.txt /build/
+
+# 安装 Python 依赖
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir pyinstaller
+
+# 设置工作目录到 backend
+WORKDIR /build/backend
+
+# 构建可执行文件
+CMD ["pyinstaller", "baseline-diff.spec", "--clean", "--noconfirm"]

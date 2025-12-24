@@ -113,12 +113,24 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
         # 3. 扫描 AOSP git log
         print(f"\n=== 扫描 AOSP Git Log ===")
         aosp_commits = git_scanner.scan_all_projects(aosp_projects)
-        database.bulk_insert_commits(aosp_commits)
+        print(f"✓ AOSP 扫描完成：{len(aosp_commits)} 个 commits")
+
+        if aosp_commits:
+            database.bulk_insert_commits(aosp_commits)
+            print(f"✓ AOSP commits 已插入数据库")
+        else:
+            print(f"⚠ 警告：AOSP 没有扫描到任何 commits")
 
         # 4. 扫描 Vendor git log
         print(f"\n=== 扫描 Vendor Git Log ===")
         vendor_commits = git_scanner.scan_all_projects(vendor_projects)
-        database.bulk_insert_commits(vendor_commits)
+        print(f"✓ Vendor 扫描完成：{len(vendor_commits)} 个 commits")
+
+        if vendor_commits:
+            database.bulk_insert_commits(vendor_commits)
+            print(f"✓ Vendor commits 已插入数据库")
+        else:
+            print(f"⚠ 警告：Vendor 没有扫描到任何 commits")
 
         # 5. 差异分析
         print(f"\n=== 执行差异分析 ===")
@@ -127,13 +139,26 @@ async def scan_repos(request: ScanRequest, background_tasks: BackgroundTasks):
 
         stats = diff_analyzer.analyze_diff(aosp_project_names, vendor_project_names)
 
+        # 验证数据库中的数据
+        db_commits = database.get_all_commits()
+        print(f"\n✓ 数据库验证：{len(db_commits)} 个 commits")
+
+        total_scanned = len(aosp_commits) + len(vendor_commits)
+        if total_scanned == 0:
+            print("\n⚠ 警告：没有扫描到任何 commits，请检查：")
+            print("  1. manifest.xml 是否包含有效的项目")
+            print("  2. 项目路径是否存在")
+            print("  3. 项目是否为 Git 仓库")
+            print("  4. Git 仓库是否包含 commits")
+
         return {
             "success": True,
-            "message": "扫描完成",
+            "message": "扫描完成" if total_scanned > 0 else "扫描完成，但未找到任何 commits",
             "stats": {
                 "aosp_projects": len(aosp_projects),
                 "vendor_projects": len(vendor_projects),
                 "total_commits": len(aosp_commits) + len(vendor_commits),
+                "db_commits": len(db_commits),
                 "diff_stats": stats
             }
         }
