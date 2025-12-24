@@ -1,5 +1,78 @@
 # 故障排查指南
 
+## 错误：commits 表为空（插入成功但数据库中查询为 0）
+
+### 问题症状
+
+运行诊断脚本 `diagnose.py` 后，显示：
+```
+✓ 插入成功
+✓ 数据库中现在有 0 个 commits
+```
+
+### 问题原因
+
+这是由于 **CHECK 约束冲突** 导致的。旧版本的代码将 `source` 字段初始化为空字符串 `""`，但数据库要求 source 必须是以下值之一：
+- `'common'`
+- `'aosp_only'`
+- `'vendor_only'`
+- `NULL`
+
+空字符串不符合约束，所以 `INSERT OR IGNORE` 会忽略所有记录。
+
+### 解决方案
+
+#### 方法 1：运行迁移脚本（推荐，保留现有数据）
+
+```bash
+cd backend
+python migrate_db.py
+```
+
+选择选项 1 "迁移数据库（保留现有数据）"，脚本会：
+1. 创建新表结构（修复 CHECK 约束）
+2. 迁移现有数据
+3. 重建索引
+
+#### 方法 2：重新创建数据库（删除所有数据）
+
+```bash
+cd backend
+python migrate_db.py
+```
+
+选择选项 2 "重新创建数据库"，然后重新扫描仓库。
+
+或者直接运行：
+```bash
+cd backend
+python migrate_db.py --recreate
+```
+
+#### 方法 3：手动删除数据库
+
+```bash
+rm backend/db.sqlite3
+```
+
+然后重新运行程序，数据库会自动初始化。
+
+### 验证修复
+
+运行诊断脚本验证：
+```bash
+cd backend
+python diagnose.py /path/to/your-aosp
+```
+
+应该看到：
+```
+✓ 插入操作已执行
+✓ 数据库中现在有 XXX 个 commits
+```
+
+---
+
 ## 错误：lib64/ld-linux-x86_64.so.2: no such file
 
 ### 问题诊断

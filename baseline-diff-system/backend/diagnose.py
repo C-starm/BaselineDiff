@@ -201,8 +201,18 @@ def main():
 
     try:
         print(f"尝试插入 {len(commits)} 个 commits...")
+
+        # 检查 source 字段值
+        print(f"\n检查 commits 数据:")
+        sample_commit = commits[0] if commits else None
+        if sample_commit:
+            print(f"  source 字段值: {repr(sample_commit.get('source'))}")
+            if sample_commit.get('source') == '':
+                print(f"  ⚠ 警告: source 为空字符串，可能违反 CHECK 约束")
+                print(f"  建议: 运行 python migrate_db.py 修复")
+
         database.bulk_insert_commits(commits)
-        print("✓ 插入成功")
+        print("✓ 插入操作已执行")
 
         # 验证
         conn = sqlite3.connect("db.sqlite3")
@@ -212,6 +222,18 @@ def main():
         conn.close()
 
         print(f"✓ 数据库中现在有 {count} 个 commits")
+
+        if len(commits) > 0 and count == 0:
+            print("\n✗ 严重问题：插入的数据没有保存到数据库！")
+            print("\n可能的原因:")
+            print("  1. CHECK 约束冲突 - source 字段值不符合要求")
+            print("     数据库要求: source IN ('common', 'aosp_only', 'vendor_only') 或 NULL")
+            print("     实际值: 空字符串 ''")
+            print("\n解决方案:")
+            print("  运行迁移脚本修复数据库:")
+            print("    cd backend")
+            print("    python migrate_db.py")
+            sys.exit(1)
 
     except Exception as e:
         print(f"✗ 插入失败: {e}")

@@ -92,7 +92,7 @@ class GitScanner:
                     "date": date,
                     "subject": subject,
                     "message": message,
-                    "source": ""  # 初始化为空，后续差异分析时填充
+                    "source": None  # 初始化为 NULL，后续差异分析时填充
                 })
 
             return commits
