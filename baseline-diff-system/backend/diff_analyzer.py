@@ -19,35 +19,41 @@ class DiffAnalyzer:
     def load_change_ids_from_db(self, aosp_projects: List[str], vendor_projects: List[str]):
         """
         从数据库加载 Change-Id
+        分批处理以避免 SQLite 的 999 变量限制
         :param aosp_projects: AOSP 项目名称列表
         :param vendor_projects: Vendor 项目名称列表
         """
-        with get_db() as conn:
-            # 获取 AOSP Change-Ids
-            if aosp_projects:
-                placeholders = ','.join(['?'] * len(aosp_projects))
+        BATCH_SIZE = 500  # 每批最多 500 个变量，安全余量
+
+        def load_change_ids_in_batches(conn, projects: List[str]) -> Set[str]:
+            """分批加载，避免超过 SQLite 变量限制"""
+            all_change_ids = set()
+            total = len(projects)
+
+            for i in range(0, total, BATCH_SIZE):
+                batch = projects[i:i + BATCH_SIZE]
+                placeholders = ','.join(['?'] * len(batch))
                 cursor = conn.execute(
                     f"""SELECT DISTINCT change_id
                         FROM commits
                         WHERE project IN ({placeholders})
                         AND change_id IS NOT NULL AND change_id != ''""",
-                    aosp_projects
+                    batch
                 )
-                self.aosp_change_ids = {row['change_id'] for row in cursor.fetchall()}
+                all_change_ids.update(row['change_id'] for row in cursor.fetchall())
+
+            return all_change_ids
+
+        with get_db() as conn:
+            # 获取 AOSP Change-Ids
+            if aosp_projects:
+                self.aosp_change_ids = load_change_ids_in_batches(conn, aosp_projects)
             else:
                 self.aosp_change_ids = set()
 
             # 获取 Vendor Change-Ids
             if vendor_projects:
-                placeholders = ','.join(['?'] * len(vendor_projects))
-                cursor = conn.execute(
-                    f"""SELECT DISTINCT change_id
-                        FROM commits
-                        WHERE project IN ({placeholders})
-                        AND change_id IS NOT NULL AND change_id != ''""",
-                    vendor_projects
-                )
-                self.vendor_change_ids = {row['change_id'] for row in cursor.fetchall()}
+                self.vendor_change_ids = load_change_ids_in_batches(conn, vendor_projects)
             else:
                 self.vendor_change_ids = set()
 
@@ -72,31 +78,38 @@ class DiffAnalyzer:
     def update_commit_sources_in_db(self):
         """
         根据差异分析结果更新数据库中所有 commits 的 source 字段
+        分批处理以避免 SQLite 的 999 变量限制
         """
+        BATCH_SIZE = 500  # 每批最多 500 个变量，安全余量
+
+        def update_in_batches(conn, change_ids: Set[str], source_value: str):
+            """分批更新，避免超过 SQLite 变量限制"""
+            change_id_list = list(change_ids)
+            total = len(change_id_list)
+
+            for i in range(0, total, BATCH_SIZE):
+                batch = change_id_list[i:i + BATCH_SIZE]
+                placeholders = ','.join(['?'] * len(batch))
+                conn.execute(
+                    f"UPDATE commits SET source = ? WHERE change_id IN ({placeholders})",
+                    [source_value] + batch
+                )
+
+            if total > 0:
+                print(f"  ✓ 已更新 {total} 个 {source_value} commits")
+
         with get_db() as conn:
             # 更新 common
             if self.common_change_ids:
-                placeholders = ','.join(['?'] * len(self.common_change_ids))
-                conn.execute(
-                    f"UPDATE commits SET source = 'common' WHERE change_id IN ({placeholders})",
-                    list(self.common_change_ids)
-                )
+                update_in_batches(conn, self.common_change_ids, 'common')
 
             # 更新 aosp_only
             if self.aosp_only_change_ids:
-                placeholders = ','.join(['?'] * len(self.aosp_only_change_ids))
-                conn.execute(
-                    f"UPDATE commits SET source = 'aosp_only' WHERE change_id IN ({placeholders})",
-                    list(self.aosp_only_change_ids)
-                )
+                update_in_batches(conn, self.aosp_only_change_ids, 'aosp_only')
 
             # 更新 vendor_only
             if self.vendor_only_change_ids:
-                placeholders = ','.join(['?'] * len(self.vendor_only_change_ids))
-                conn.execute(
-                    f"UPDATE commits SET source = 'vendor_only' WHERE change_id IN ({placeholders})",
-                    list(self.vendor_only_change_ids)
-                )
+                update_in_batches(conn, self.vendor_only_change_ids, 'vendor_only')
 
             # 对于没有 Change-Id 的 commits，根据它们所属的项目来标记
             # 这里需要知道哪些项目属于 AOSP，哪些属于 Vendor
