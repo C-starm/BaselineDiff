@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Layout, Row, Col, Card, Statistic, Input, Button, Space, message } from 'antd';
+import { Layout, Row, Col, Card, Statistic, Input, Button, Space, message, Spin, Empty } from 'antd';
 import ScanForm from './components/ScanForm';
 import FilterPanel from './components/FilterPanel';
 import CommitTable from './components/CommitTable';
@@ -25,9 +25,11 @@ function App() {
     dateRange: null,
   });
   const [customCategoryName, setCustomCategoryName] = useState('');
+  const [loading, setLoading] = useState(false);  // 加载状态
 
   // 加载 commits（支持筛选）
   const loadCommits = async (filterParams = {}) => {
+    setLoading(true);
     try {
       // 构建 API 参数
       const params = {
@@ -59,6 +61,8 @@ function App() {
     } catch (error) {
       console.error('加载 commits 失败:', error);
       message.error('加载 commits 失败');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -227,16 +231,33 @@ function App() {
                   : `Commits 列表 (${filteredCommits.length.toLocaleString()} / ${commits.length.toLocaleString()})`
               }
               extra={
-                <Button onClick={loadCommits}>
+                <Button onClick={() => loadCommits()} loading={loading}>
                   刷新
                 </Button>
               }
             >
-              <CommitTable
-                commits={filteredCommits}
-                categories={categories}
-                onCategoriesChange={loadCommits}
-              />
+              {loading ? (
+                <div style={{ textAlign: 'center', padding: '50px 0' }}>
+                  <Spin size="large" tip="加载中，请稍候..." />
+                </div>
+              ) : filteredCommits.length === 0 ? (
+                <Empty
+                  description={
+                    <span>
+                      {totalCommits === 0
+                        ? '暂无数据，请先扫描仓库'
+                        : '没有符合筛选条件的 commits'}
+                    </span>
+                  }
+                  style={{ padding: '50px 0' }}
+                />
+              ) : (
+                <CommitTable
+                  commits={filteredCommits}
+                  categories={categories}
+                  onCategoriesChange={loadCommits}
+                />
+              )}
             </Card>
           </Col>
         </Row>
