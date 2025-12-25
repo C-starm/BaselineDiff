@@ -1,5 +1,6 @@
 import React from 'react';
-import { Table, Tag, Select, Typography, Space } from 'antd';
+import { Table, Tag, Select, Typography, Space, Tooltip, Dropdown } from 'antd';
+import { LinkOutlined } from '@ant-design/icons';
 import { setCategories } from '../api/client';
 
 const { Text, Link } = Typography;
@@ -34,16 +35,69 @@ const CommitTable = ({ commits, categories, onCategoriesChange }) => {
       title: 'Hash',
       dataIndex: 'hash',
       key: 'hash',
-      width: 100,
-      render: (hash, record) => (
-        record.url ? (
+      width: 140,
+      render: (hash, record) => {
+        const hasRelated = record.related_commits && record.related_commits.length > 0;
+
+        if (hasRelated) {
+          // 有相关 commits（两边都有）
+          const items = [
+            {
+              key: 'current',
+              label: (
+                <div>
+                  <div style={{ fontSize: '12px', color: '#999' }}>当前版本</div>
+                  <div>
+                    <Text strong>{record.project}</Text>
+                  </div>
+                  <Link href={record.url} target="_blank">
+                    {hash.substring(0, 12)}
+                  </Link>
+                </div>
+              ),
+            },
+            { type: 'divider' },
+            ...record.related_commits.map((related, idx) => ({
+              key: `related-${idx}`,
+              label: (
+                <div>
+                  <div style={{ fontSize: '12px', color: '#999' }}>另一边版本</div>
+                  <div>
+                    <Text strong>{related.project}</Text>
+                  </div>
+                  <Link href={related.url} target="_blank">
+                    {related.hash.substring(0, 12)}
+                  </Link>
+                </div>
+              ),
+            })),
+          ];
+
+          return (
+            <Dropdown menu={{ items }} trigger={['click']}>
+              <Space style={{ cursor: 'pointer' }}>
+                <Link href={record.url} target="_blank">
+                  {hash.substring(0, 8)}
+                </Link>
+                <Tooltip title="此 Change-Id 在两边都有，点击查看">
+                  <Tag color="blue" style={{ margin: 0, fontSize: '11px' }}>
+                    +{record.related_commits.length}
+                  </Tag>
+                </Tooltip>
+              </Space>
+            </Dropdown>
+          );
+        }
+
+        // 只有一边
+        return record.url ? (
           <Link href={record.url} target="_blank">
             {hash.substring(0, 8)}
           </Link>
         ) : (
           <Text>{hash.substring(0, 8)}</Text>
-        )
-      ),
+        );
+      },
     },
     {
       title: 'Author',

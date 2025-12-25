@@ -175,6 +175,32 @@ def get_all_commits(
             else:
                 commit['categories'] = []
 
+            # 对于 common commits，查找相同 Change-Id 的其他 commits（两边的版本）
+            if commit.get('source') == 'common' and commit.get('change_id'):
+                related_cursor = conn.execute("""
+                    SELECT c.hash, c.project, c.reviewed_on, m.remote_url
+                    FROM commits c
+                    LEFT JOIN manifests m ON c.project = m.project
+                    WHERE c.change_id = ? AND c.hash != ?
+                    LIMIT 5
+                """, (commit['change_id'], commit['hash']))
+
+                related_commits = []
+                for related_row in related_cursor.fetchall():
+                    related = dict(related_row)
+                    # 构造 URL
+                    if related.get('reviewed_on'):
+                        related['url'] = related['reviewed_on']
+                    elif related.get('remote_url'):
+                        related['url'] = f"{related['remote_url']}/{related['project']}/commit/{related['hash']}"
+                    else:
+                        related['url'] = None
+                    related_commits.append(related)
+
+                commit['related_commits'] = related_commits
+            else:
+                commit['related_commits'] = []
+
             commits.append(commit)
 
         return commits
