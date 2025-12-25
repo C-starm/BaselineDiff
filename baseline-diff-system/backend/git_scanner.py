@@ -28,6 +28,14 @@ class GitScanner:
         match = re.search(r'Change-Id:\s*([A-Za-z0-9]+)', message, re.IGNORECASE)
         return match.group(1) if match else None
 
+    def extract_reviewed_on(self, message: str) -> Optional[str]:
+        """
+        从 commit message 中提取 Reviewed-on URL
+        格式通常为: Reviewed-on: https://android-review.googlesource.com/c/...
+        """
+        match = re.search(r'Reviewed-on:\s*(https?://[^\s]+)', message, re.IGNORECASE)
+        return match.group(1) if match else None
+
     def scan_commits(self, max_count: Optional[int] = None) -> List[Dict]:
         """
         扫描 git log 并返回 commit 列表
@@ -97,8 +105,9 @@ class GitScanner:
                 else:
                     message = ""
 
-                # 提取 Change-Id
+                # 提取 Change-Id 和 Reviewed-on
                 change_id = self.extract_change_id(full_message)
+                reviewed_on = self.extract_reviewed_on(full_message)
 
                 commits.append({
                     "project": self.project_name,
@@ -108,6 +117,7 @@ class GitScanner:
                     "date": date,
                     "subject": subject,
                     "message": message,
+                    "reviewed_on": reviewed_on,
                     "source": None  # 初始化为 NULL，后续差异分析时填充
                 })
 

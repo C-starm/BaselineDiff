@@ -45,14 +45,15 @@ def insert_manifest(project: str, remote_url: str, path: str):
 
 
 def insert_commit(project: str, hash: str, change_id: Optional[str],
-                  author: str, date: str, subject: str, message: str, source: str):
+                  author: str, date: str, subject: str, message: str, source: str,
+                  reviewed_on: Optional[str] = None):
     """插入 commit 记录"""
     with get_db() as conn:
         conn.execute(
             """INSERT OR IGNORE INTO commits
-               (project, hash, change_id, author, date, subject, message, source)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (project, hash, change_id, author, date, subject, message, source)
+               (project, hash, change_id, author, date, subject, message, source, reviewed_on)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (project, hash, change_id, author, date, subject, message, source, reviewed_on)
         )
         conn.commit()
 
@@ -126,7 +127,7 @@ def get_all_commits(
             WITH filtered_commits AS (
                 SELECT
                     id, project, hash, change_id, author, date,
-                    subject, message, source
+                    subject, message, source, reviewed_on
                 FROM commits
                 {where_clause}
                 ORDER BY date DESC
@@ -135,7 +136,7 @@ def get_all_commits(
             )
             SELECT
                 fc.id, fc.project, fc.hash, fc.change_id, fc.author, fc.date,
-                fc.subject, fc.message, fc.source,
+                fc.subject, fc.message, fc.source, fc.reviewed_on,
                 m.remote_url,
                 GROUP_CONCAT(cat.id) as category_ids,
                 GROUP_CONCAT(cat.name) as category_names
@@ -152,8 +153,12 @@ def get_all_commits(
         commits = []
         for row in cursor.fetchall():
             commit = dict(row)
-            # 构造 commit URL
-            if commit['remote_url']:
+            # 构造 commit URL - 优先使用 Reviewed-on URL
+            if commit.get('reviewed_on'):
+                # 如果有 Reviewed-on URL，直接使用
+                commit['url'] = commit['reviewed_on']
+            elif commit['remote_url']:
+                # 否则使用基于 hash 的 URL
                 commit['url'] = f"{commit['remote_url']}/{commit['project']}/commit/{commit['hash']}"
             else:
                 commit['url'] = None
@@ -328,8 +333,8 @@ def bulk_insert_commits(commits: List[Dict]):
     with get_db() as conn:
         conn.executemany(
             """INSERT OR IGNORE INTO commits
-               (project, hash, change_id, author, date, subject, message, source)
-               VALUES (:project, :hash, :change_id, :author, :date, :subject, :message, :source)""",
+               (project, hash, change_id, author, date, subject, message, source, reviewed_on)
+               VALUES (:project, :hash, :change_id, :author, :date, :subject, :message, :source, :reviewed_on)""",
             commits
         )
         conn.commit()

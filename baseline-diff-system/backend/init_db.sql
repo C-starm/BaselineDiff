@@ -23,6 +23,7 @@ CREATE TABLE commits (
     date TEXT,
     subject TEXT,
     message TEXT,
+    reviewed_on TEXT,
     source TEXT CHECK(source IS NULL OR source IN ('common','aosp_only','vendor_only')),
     FOREIGN KEY (project) REFERENCES manifests(project)
 );
