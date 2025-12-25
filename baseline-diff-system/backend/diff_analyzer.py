@@ -75,10 +75,13 @@ class DiffAnalyzer:
             "vendor_only": len(self.vendor_only_change_ids)
         }
 
-    def update_commit_sources_in_db(self):
+    def update_commit_sources_in_db(self, aosp_projects: List[str], vendor_projects: List[str]):
         """
         根据差异分析结果更新数据库中所有 commits 的 source 字段
         分批处理以避免 SQLite 的 999 变量限制
+
+        :param aosp_projects: AOSP 项目名称列表
+        :param vendor_projects: Vendor 项目名称列表
         """
         BATCH_SIZE = 500  # 每批最多 500 个变量，安全余量
 
@@ -96,31 +99,85 @@ class DiffAnalyzer:
                 )
 
             if total > 0:
-                print(f"  ✓ 已更新 {total} 个 {source_value} commits")
+                print(f"  ✓ 已更新 {total} 个 Change-Id 为 {source_value}")
+
+        def update_by_projects_in_batches(conn, projects: List[str], source_value: str):
+            """根据项目列表分批更新"""
+            total = len(projects)
+            updated = 0
+
+            for i in range(0, total, BATCH_SIZE):
+                batch = projects[i:i + BATCH_SIZE]
+                placeholders = ','.join(['?'] * len(batch))
+                cursor = conn.execute(
+                    f"""UPDATE commits SET source = ?
+                        WHERE project IN ({placeholders})
+                        AND (change_id IS NULL OR change_id = '')""",
+                    [source_value] + batch
+                )
+                updated += cursor.rowcount
+
+            if updated > 0:
+                print(f"  ✓ 已更新 {updated} 个无 Change-Id 的 commits 为 {source_value}")
+            return updated
 
         with get_db() as conn:
-            # 更新 common
+            # 1. 基于 Change-Id 更新（有 Change-Id 的 commits）
+            print("\n基于 Change-Id 更新 source:")
+
             if self.common_change_ids:
                 update_in_batches(conn, self.common_change_ids, 'common')
 
-            # 更新 aosp_only
             if self.aosp_only_change_ids:
                 update_in_batches(conn, self.aosp_only_change_ids, 'aosp_only')
 
-            # 更新 vendor_only
             if self.vendor_only_change_ids:
                 update_in_batches(conn, self.vendor_only_change_ids, 'vendor_only')
 
-            # 对于没有 Change-Id 的 commits，根据它们所属的项目来标记
-            # 这里需要知道哪些项目属于 AOSP，哪些属于 Vendor
-            # 暂时将它们标记为 'common'（可以根据实际需求调整）
-            conn.execute(
-                "UPDATE commits SET source = 'common' WHERE change_id IS NULL OR change_id = ''"
-            )
+            # 2. 基于项目归属更新（没有 Change-Id 的 commits）
+            print("\n基于项目归属更新无 Change-Id 的 commits:")
+
+            # 区分项目归属
+            aosp_projects_set = set(aosp_projects)
+            vendor_projects_set = set(vendor_projects)
+            common_projects = aosp_projects_set & vendor_projects_set
+            aosp_only_projects = list(aosp_projects_set - vendor_projects_set)
+            vendor_only_projects = list(vendor_projects_set - aosp_projects_set)
+
+            # 更新只在 AOSP 的项目
+            if aosp_only_projects:
+                update_by_projects_in_batches(conn, aosp_only_projects, 'aosp_only')
+
+            # 更新只在 Vendor 的项目
+            if vendor_only_projects:
+                update_by_projects_in_batches(conn, vendor_only_projects, 'vendor_only')
+
+            # 对于两边都有的项目，无 Change-Id 的 commits 根据 hash 判断
+            if common_projects:
+                common_projects_list = list(common_projects)
+                updated = 0
+
+                for i in range(0, len(common_projects_list), BATCH_SIZE):
+                    batch = common_projects_list[i:i + BATCH_SIZE]
+                    placeholders = ','.join(['?'] * len(batch))
+
+                    # 对于两边都有的项目，如果 hash 相同则标记为 common
+                    # 否则按项目来源标记（这里简化处理，统一标记为 common）
+                    cursor = conn.execute(
+                        f"""UPDATE commits SET source = 'common'
+                            WHERE project IN ({placeholders})
+                            AND (change_id IS NULL OR change_id = '')
+                            AND source IS NULL""",
+                        batch
+                    )
+                    updated += cursor.rowcount
+
+                if updated > 0:
+                    print(f"  ✓ 已更新 {updated} 个两边共有项目的无 Change-Id commits 为 common")
 
             conn.commit()
 
-        print("✓ 差异分析完成，已更新 commits.source 字段")
+        print("\n✓ 差异分析完成，已更新 commits.source 字段")
 
 
 def analyze_diff(aosp_projects: List[str], vendor_projects: List[str]) -> Dict[str, int]:
@@ -133,7 +190,7 @@ def analyze_diff(aosp_projects: List[str], vendor_projects: List[str]) -> Dict[s
     analyzer = DiffAnalyzer()
     analyzer.load_change_ids_from_db(aosp_projects, vendor_projects)
     stats = analyzer.analyze()
-    analyzer.update_commit_sources_in_db()
+    analyzer.update_commit_sources_in_db(aosp_projects, vendor_projects)
 
     print(f"\n差异分析统计:")
     print(f"  AOSP Change-Ids:     {stats['total_aosp']}")
