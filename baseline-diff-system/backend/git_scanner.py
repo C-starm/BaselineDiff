@@ -43,12 +43,15 @@ class GitScanner:
             return []
 
         # 构造 git log 命令
-        # 格式: hash||author||date||subject||body
+        # 使用更可靠的分隔符（不太可能在 commit message 中出现）
+        separator = "<<GIT_COMMIT_SEP>>"
+        field_sep = "<<FIELD_SEP>>"
+
         cmd = [
             "git",
             "-C", self.project_path,
             "log",
-            "--pretty=format:%H||%an||%ad||%s||%b",
+            f"--pretty=format:{separator}%H{field_sep}%an{field_sep}%ad{field_sep}%s{field_sep}%B",
             "--date=iso"
         ]
 
@@ -65,13 +68,16 @@ class GitScanner:
             )
 
             commits = []
-            lines = result.stdout.strip().split('\n')
+            # 按照 commit 分隔符分割
+            commit_texts = result.stdout.split(separator)
 
-            for line in lines:
-                if not line.strip():
+            for commit_text in commit_texts:
+                commit_text = commit_text.strip()
+                if not commit_text:
                     continue
 
-                parts = line.split('||', 4)
+                # 按照字段分隔符分割（限制为5个部分）
+                parts = commit_text.split(field_sep, 4)
                 if len(parts) < 4:
                     continue
 
@@ -79,10 +85,20 @@ class GitScanner:
                 author = parts[1].strip()
                 date = parts[2].strip()
                 subject = parts[3].strip()
-                message = parts[4].strip() if len(parts) > 4 else ""
+                # %B 包含完整 commit message (subject + body)，我们需要去除第一行
+                full_message = parts[4].strip() if len(parts) > 4 else ""
+
+                # 分离 subject 和 body
+                # full_message 的第一行是 subject，剩余是 body
+                message_lines = full_message.split('\n')
+                if len(message_lines) > 1:
+                    # 去除第一行（subject），保留剩余部分作为 message
+                    message = '\n'.join(message_lines[1:]).strip()
+                else:
+                    message = ""
 
                 # 提取 Change-Id
-                change_id = self.extract_change_id(message)
+                change_id = self.extract_change_id(full_message)
 
                 commits.append({
                     "project": self.project_name,
